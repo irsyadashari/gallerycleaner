@@ -9,37 +9,39 @@ import SwiftUI
 import Photos
 
 struct ContentView: View {
-    @State private var photoStack: [UIImage] = [] // Stack of images
+    @State private var photoStack: [Photo] = [] // Stack of images
     @State private var isLoading = true          // Loading state
-
+    @State private var keptPhotos: [Photo] = [] // Photos swiped right but not displayed
+    
     var body: some View {
         VStack {
             if photoStack.isEmpty && isLoading {
                 ProgressView("Loading Photos...")
-            } else if photoStack.isEmpty {
-                Text("No more photos available!")
-                    .font(.headline)
+            } else if photoStack.isEmpty && !isLoading {
+                VStack {
+                    Text("No more photos available!")
+                        .font(.headline)
+                        .padding()
+                    
+                    Button(action: {
+                        fetchMorePhotos()
+                    }) {
+                        Text("Reload Photos")
+                            .font(.headline)
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.blue)
+                            .cornerRadius(10)
+                    }
                     .padding()
+                }
             } else {
                 ZStack {
                     ForEach(photoStack.indices.reversed(), id: \.self) { index in
-                        Image(uiImage: photoStack[index])
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 300, height: 400)
-                            .cornerRadius(15)
-                            .shadow(radius: 5)
-                            .offset(x: CGFloat(index) * 5, y: CGFloat(index) * 5) // Staggering effect
-                            .gesture(
-                                DragGesture()
-                                    .onEnded { gesture in
-                                        if gesture.translation.width > 100 {
-                                            keepPhoto(at: index)
-                                        } else if gesture.translation.width < -100 {
-                                            deletePhoto(at: index)
-                                        }
-                                    }
-                            )
+                        DraggableImageView(image: photoStack[index].image) { isSwipeRight in
+                            handleSwipe(at: index, keep: isSwipeRight)
+                        }
+                        .zIndex(Double(index))
                     }
                 }
                 .padding()
@@ -55,6 +57,49 @@ struct ContentView: View {
         }
     }
     
+    func handleSwipe(at index: Int, keep: Bool) {
+        // Extract the asset identifier for the swiped photo
+        guard index < photoStack.count else { return }
+        let photo = photoStack[index]
+        
+        withAnimation(.easeOut(duration: 0.2)) {
+            photoStack.remove(at: index) // Remove the photo from the stack
+        }
+        
+        if keep {
+            // Swipe Right: Keep the photo
+            keepPhoto(photo)
+        } else {
+            // Swipe Left: Delete the photo
+            deletePhoto(photo)
+        }
+    }
+    
+    // MARK: - Keep Photo Logic
+    func keepPhoto(_ photo: Photo) {
+        keptPhotos.append(photo)
+        print("Photo kept.")
+    }
+    
+    // MARK: - Delete Photo Logic
+    func deletePhoto(_ photo: Photo) {
+        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [photo.assetIdentifier], options: nil)
+        guard let assetToDelete = fetchResult.firstObject else {
+            print("Unable to fetch asset for deletion.")
+            return
+        }
+        
+        PHPhotoLibrary.shared().performChanges({
+            PHAssetChangeRequest.deleteAssets([assetToDelete] as NSArray)
+        }) { success, error in
+            if success {
+                print("Photo successfully deleted.")
+            } else if let error = error {
+                print("Error deleting photo: \(error.localizedDescription)")
+            }
+        }
+    }
+
     // Request photo library access
     func requestPhotoLibraryAccess() {
         PHPhotoLibrary.requestAuthorization { status in
@@ -67,51 +112,55 @@ struct ContentView: View {
         }
     }
     
-    // Handle keeping a photo
-    func keepPhoto(at index: Int) {
-        withAnimation {
-            photoStack.remove(at: index)
-        }
-    }
-    
-    // Handle deleting a photo
-    func deletePhoto(at index: Int) {
-        withAnimation {
-            photoStack.remove(at: index)
-        }
-    }
-    
     // Fetch more photos from the library
     func fetchMorePhotos() {
         isLoading = true
+        
+        // Fetch the assets
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        fetchOptions.fetchLimit = 10
         
         let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+        guard assets.count > 0 else {
+            DispatchQueue.main.async {
+                isLoading = false
+            }
+            return
+        }
+        print("asset count: \(assets.count)")
         
+        // Load images asynchronously
         let imageManager = PHImageManager.default()
         let targetSize = CGSize(width: 400, height: 400)
         let requestOptions = PHImageRequestOptions()
         requestOptions.deliveryMode = .highQualityFormat
-        requestOptions.isSynchronous = false
+        requestOptions.isSynchronous = true
+        requestOptions.isNetworkAccessAllowed = true // Allow loading from iCloud
+        requestOptions.resizeMode = .exact           // Ensure images are resized correctly
         
-        var newPhotos: [UIImage] = []
+        var newPhotos: [Photo] = []
+        let group = DispatchGroup() // To track loading completion
         
         assets.enumerateObjects { asset, _, _ in
+            guard !keptPhotos.map {$0.assetIdentifier}.contains(asset.localIdentifier) else { return }
+            group.enter() // Start tracking this request
+            
             imageManager.requestImage(
                 for: asset,
                 targetSize: targetSize,
                 contentMode: .aspectFill,
                 options: requestOptions
             ) { image, _ in
-                if let image = image {
-                    newPhotos.append(image)
+                if let _image = image {
+                    let photo = Photo(image: _image, assetIdentifier: asset.localIdentifier)
+                    newPhotos.append(photo)
                 }
+                group.leave() // End tracking this request
             }
         }
         
-        DispatchQueue.main.async {
+        // When all image requests are complete
+        group.notify(queue: .main) {
             photoStack.append(contentsOf: newPhotos)
             isLoading = false
         }
@@ -121,4 +170,21 @@ struct ContentView: View {
 
 #Preview {
     ContentView()
+}
+
+struct Photo {
+    let image: UIImage
+    let assetIdentifier: String
+}
+
+
+extension UIImage {
+    var assetIdentifier: String? {
+        return self.accessibilityIdentifier
+    }
+    
+    func setAssetIdentifier(_ identifier: String) -> UIImage {
+        self.accessibilityIdentifier = identifier
+        return self
+    }
 }

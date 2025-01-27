@@ -11,9 +11,11 @@ import SwiftUI
 struct DraggableImageView: View {
     @State private var dragOffset = CGSize.zero // Tracks the drag gesture temporarily
     @State private var angle: Double = 0
+    let image: UIImage // Pass a dynamic image
+    let onSwipe: (Bool) -> Void // Callback to indicate swipe direction (true for right, false for left)
 
     var body: some View {
-        Image("magazine-back-cover") // Replace with your image name
+        Image(uiImage: image) // Replace with your image name
             .resizable()
             .scaledToFit()
             .frame(width: 400, height: 400) // Adjust as needed
@@ -22,16 +24,24 @@ struct DraggableImageView: View {
                 DragGesture()
                     .onChanged { value in
                         // Update offset with horizontal movement only
-                        dragOffset.width = value.translation.width * 3
+                        dragOffset.width = value.translation.width 
                         
                         // Calculate rotation angle based on horizontal swipe direction
                         angle = dragOffset.width/10 // Adjust divisor for sensitivity
                     }
                     .onEnded { value in
-                        withAnimation(.spring()) {
-                            dragOffset = .zero // Snap back to the center
-                            angle = 0
-                            UIImpactFeedbackGenerator(style: .light).impactOccurred() // Add haptic feedback
+                        if value.translation.width > 100 {
+                            // Swipe right: Keep the photo
+                            onSwipe(true)
+                        } else if value.translation.width < -100 {
+                            // Swipe left: Delete the photo
+                            onSwipe(false)
+                        } else {
+                            // Snap back to the center
+                            withAnimation(.spring()) {
+                                dragOffset = .zero
+                                angle = 0
+                            }
                         }
                     }
             )
