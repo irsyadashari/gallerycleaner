@@ -12,6 +12,7 @@ struct ContentView: View {
     @State private var photoStack: [Photo] = [] // Stack of images
     @State private var isLoading = true          // Loading state
     @State private var keptPhotos: [Photo] = [] // Photos swiped right but not displayed
+    @State private var fetchLimit: Int = 10
     
     var body: some View {
         VStack {
@@ -46,7 +47,7 @@ struct ContentView: View {
                 }
                 .padding()
                 .onChange(of: photoStack.count) { count in
-                    if count <= 3 {
+                    if count < 2 {
                         fetchMorePhotos()
                     }
                 }
@@ -63,7 +64,8 @@ struct ContentView: View {
         let photo = photoStack[index]
         
         withAnimation(.easeOut(duration: 0.2)) {
-            photoStack.remove(at: index) // Remove the photo from the stack
+            // Safely remove the photo from the stack first
+            let photo = photoStack.remove(at: index)
         }
         
         if keep {
@@ -119,6 +121,7 @@ struct ContentView: View {
         // Fetch the assets
         let fetchOptions = PHFetchOptions()
         fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        fetchOptions.fetchLimit = fetchLimit
         
         let assets = PHAsset.fetchAssets(with: .image, options: fetchOptions)
         guard assets.count > 0 else {
@@ -127,7 +130,6 @@ struct ContentView: View {
             }
             return
         }
-        print("asset count: \(assets.count)")
         
         // Load images asynchronously
         let imageManager = PHImageManager.default()
@@ -141,8 +143,15 @@ struct ContentView: View {
         var newPhotos: [Photo] = []
         let group = DispatchGroup() // To track loading completion
         
+        let keptIdentifiers = keptPhotos.map { $0.assetIdentifier }
+        let existingIdentifiers = photoStack.map { $0.assetIdentifier }
+        
         assets.enumerateObjects { asset, _, _ in
-            guard !keptPhotos.map {$0.assetIdentifier}.contains(asset.localIdentifier) else { return }
+            let assetIdentifier = asset.localIdentifier
+            // Skip assets already in `photoStack` or `keptPhotos`
+            guard !keptIdentifiers.contains(assetIdentifier),
+                  !existingIdentifiers.contains(assetIdentifier) else { return }
+            
             group.enter() // Start tracking this request
             
             imageManager.requestImage(
@@ -164,6 +173,8 @@ struct ContentView: View {
             photoStack.append(contentsOf: newPhotos)
             isLoading = false
         }
+        
+        self.fetchLimit += 10
     }
 }
 

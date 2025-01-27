@@ -36,12 +36,12 @@ struct DraggableImageView: View {
                         } else if value.translation.width < -100 {
                             // Swipe left: Delete the photo
                             onSwipe(false)
-                        } else {
-                            // Snap back to the center
-                            withAnimation(.spring()) {
-                                dragOffset = .zero
-                                angle = 0
-                            }
+                        }
+                        
+                        // Snap back to the center
+                        withAnimation(.spring()) {
+                            dragOffset = .zero
+                            angle = 0
                         }
                     }
             )
