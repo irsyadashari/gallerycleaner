@@ -14,11 +14,14 @@ struct DraggableImageView: View {
     let image: UIImage // Pass a dynamic image
     let onSwipe: (Bool) -> Void // Callback to indicate swipe direction (true for right, false for left)
 
+    private let screenWidth =  UIScreen.main.bounds.width
+    private let screenHeight =  UIScreen.main.bounds.height - 200
+    
     var body: some View {
         Image(uiImage: image) // Replace with your image name
             .resizable()
             .scaledToFit()
-            .frame(width: 400, height: 400) // Adjust as needed
+            .frame(width: screenWidth, height: screenHeight) // Adjust as needed
             .offset(x: dragOffset.width, y: 0) // Apply horizontal offset only
             .gesture(
                 DragGesture()
@@ -27,7 +30,7 @@ struct DraggableImageView: View {
                         dragOffset.width = value.translation.width 
                         
                         // Calculate rotation angle based on horizontal swipe direction
-                        angle = dragOffset.width/10 // Adjust divisor for sensitivity
+                        angle = dragOffset.width / 10 // Adjust divisor for sensitivity
                     }
                     .onEnded { value in
                         if value.translation.width > 100 {

@@ -9,13 +9,20 @@ import SwiftUI
 import Photos
 
 struct ContentView: View {
-    @State private var photoStack: [Photo] = [] // Stack of images
     @State private var isLoading = true          // Loading state
+    @State private var isFetching = false // Prevent simultaneous fetches
+    @State private var photoStack: [Photo] = [] // Stack of images
     @State private var keptPhotos: [Photo] = [] // Photos swiped right but not displayed
+    @State private var photosToDelete: [Photo] = []
+    @State private var deletedPhotos: [Photo] = [] // Store asset identifiers of deleted photos
     @State private var fetchLimit: Int = 10
+    
+    private let screenWidth =  UIScreen.main.bounds.width
+    private let screenHeight =  UIScreen.main.bounds.height - 200
     
     var body: some View {
         VStack {
+            Spacer()
             if photoStack.isEmpty && isLoading {
                 ProgressView("Loading Photos...")
             } else if photoStack.isEmpty && !isLoading {
@@ -48,13 +55,28 @@ struct ContentView: View {
                 .padding()
                 .onChange(of: photoStack.count) { count in
                     if count < 2 {
-                        fetchMorePhotos()
+                        debounceFetchMorePhotos()
                     }
                 }
             }
-        }
+            Spacer()
+            Button("Delete All") {
+                deletePendingPhotos()
+            }
+            .disabled(photosToDelete.isEmpty) // Disable if there are no photos to delete
+
+        } // VSTACK
         .onAppear {
             requestPhotoLibraryAccess()
+        }
+    }
+    
+    // Debounced fetch method
+    func debounceFetchMorePhotos() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { // Debounce delay
+            if photoStack.count < 2 && !isLoading {
+                fetchMorePhotos()
+            }
         }
     }
     
@@ -65,15 +87,14 @@ struct ContentView: View {
         
         withAnimation(.easeOut(duration: 0.2)) {
             // Safely remove the photo from the stack first
-            let photo = photoStack.remove(at: index)
+            photoStack.remove(at: index)
         }
         
-        if keep {
-            // Swipe Right: Keep the photo
+        if keep { // Swipe Right: Keep the photo
             keepPhoto(photo)
-        } else {
-            // Swipe Left: Delete the photo
-            deletePhoto(photo)
+        } else {  // Swipe Left: Delete the photo
+            photosToDelete.append(photo) // Collect photos for deletion
+            deletedPhotos.append(contentsOf: photosToDelete) // Track deleted photo
         }
     }
     
@@ -83,24 +104,23 @@ struct ContentView: View {
         print("Photo kept.")
     }
     
-    // MARK: - Delete Photo Logic
-    func deletePhoto(_ photo: Photo) {
-        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: [photo.assetIdentifier], options: nil)
-        guard let assetToDelete = fetchResult.firstObject else {
-            print("Unable to fetch asset for deletion.")
-            return
-        }
+    // Add this to delete photos in bulk
+    func deletePendingPhotos() {
+        let identifiers = photosToDelete.map { $0.assetIdentifier }
+        let fetchResult = PHAsset.fetchAssets(withLocalIdentifiers: identifiers, options: nil)
         
         PHPhotoLibrary.shared().performChanges({
-            PHAssetChangeRequest.deleteAssets([assetToDelete] as NSArray)
+            PHAssetChangeRequest.deleteAssets(fetchResult)
         }) { success, error in
             if success {
-                print("Photo successfully deleted.")
+                print("Photos successfully deleted.")
+                photosToDelete.removeAll()
             } else if let error = error {
-                print("Error deleting photo: \(error.localizedDescription)")
+                print("Error deleting photos: \(error.localizedDescription)")
             }
         }
     }
+
 
     // Request photo library access
     func requestPhotoLibraryAccess() {
@@ -116,7 +136,10 @@ struct ContentView: View {
     
     // Fetch more photos from the library
     func fetchMorePhotos() {
+        guard !isFetching else { return }
         isLoading = true
+        isFetching = true
+        fetchLimit += 10
         
         // Fetch the assets
         let fetchOptions = PHFetchOptions()
@@ -133,7 +156,8 @@ struct ContentView: View {
         
         // Load images asynchronously
         let imageManager = PHImageManager.default()
-        let targetSize = CGSize(width: 400, height: 400)
+        
+        let targetSize = CGSize(width: screenWidth, height: screenHeight)
         let requestOptions = PHImageRequestOptions()
         requestOptions.deliveryMode = .highQualityFormat
         requestOptions.isSynchronous = true
@@ -145,11 +169,13 @@ struct ContentView: View {
         
         let keptIdentifiers = keptPhotos.map { $0.assetIdentifier }
         let existingIdentifiers = photoStack.map { $0.assetIdentifier }
+        let deletedIdentifiers = deletedPhotos.map { $0.assetIdentifier }
         
         assets.enumerateObjects { asset, _, _ in
             let assetIdentifier = asset.localIdentifier
-            // Skip assets already in `photoStack` or `keptPhotos`
-            guard !keptIdentifiers.contains(assetIdentifier),
+            // Skip assets already in `photoStack` or `keptPhotos` or "deletedPhotos"
+            guard !deletedIdentifiers.contains(assetIdentifier),
+                  !keptIdentifiers.contains(assetIdentifier),
                   !existingIdentifiers.contains(assetIdentifier) else { return }
             
             group.enter() // Start tracking this request
@@ -171,10 +197,11 @@ struct ContentView: View {
         // When all image requests are complete
         group.notify(queue: .main) {
             photoStack.append(contentsOf: newPhotos)
-            isLoading = false
+            DispatchQueue.main.async {
+                isLoading = false
+                isFetching = false // Reset the flag
+            }
         }
-        
-        self.fetchLimit += 10
     }
 }
 
