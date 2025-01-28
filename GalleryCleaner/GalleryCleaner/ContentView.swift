@@ -159,7 +159,7 @@ struct ContentView: View {
         
         let targetSize = CGSize(width: screenWidth, height: screenHeight)
         let requestOptions = PHImageRequestOptions()
-        requestOptions.deliveryMode = .highQualityFormat
+        requestOptions.deliveryMode = .fastFormat
         requestOptions.isSynchronous = true
         requestOptions.isNetworkAccessAllowed = true // Allow loading from iCloud
         requestOptions.resizeMode = .exact           // Ensure images are resized correctly
