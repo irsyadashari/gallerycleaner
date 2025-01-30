@@ -46,7 +46,7 @@ struct ContentView: View {
             } else {
                 ZStack {
                     ForEach(photoStack.indices.reversed(), id: \.self) { index in
-                        DraggableImageView(image: photoStack[index].image) { isSwipeRight in
+                        DraggableImageView(image: photoStack[index].image, imageIndex: index) { isSwipeRight in
                             handleSwipe(at: index, keep: isSwipeRight)
                         }
                         .zIndex(Double(index))
@@ -159,7 +159,7 @@ struct ContentView: View {
         
         let targetSize = CGSize(width: screenWidth, height: screenHeight)
         let requestOptions = PHImageRequestOptions()
-        requestOptions.deliveryMode = .fastFormat
+        requestOptions.deliveryMode = .opportunistic
         requestOptions.isSynchronous = true
         requestOptions.isNetworkAccessAllowed = true // Allow loading from iCloud
         requestOptions.resizeMode = .exact           // Ensure images are resized correctly

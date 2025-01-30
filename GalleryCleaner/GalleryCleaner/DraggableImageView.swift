@@ -9,49 +9,65 @@
 import SwiftUI
 
 struct DraggableImageView: View {
-    @State private var dragOffset = CGSize.zero // Tracks the drag gesture temporarily
+    @State private var dragOffset = CGSize.zero
     @State private var angle: Double = 0
-    let image: UIImage // Pass a dynamic image
-    let onSwipe: (Bool) -> Void // Callback to indicate swipe direction (true for right, false for left)
-
-    private let screenWidth =  UIScreen.main.bounds.width
-    private let screenHeight =  UIScreen.main.bounds.height - 200
+    
+    let image: UIImage
+    let imageIndex: Int
+    let onSwipe: (Bool) -> Void
+    let swipeThreshold: CGFloat = 100
+    let rotationSensitivity: Double = 10
+    
+    private let screenWidth = UIScreen.main.bounds.width
+    private let screenHeight = UIScreen.main.bounds.height - 200
     
     var body: some View {
-        Image(uiImage: image) // Replace with your image name
-            .resizable()
-            .scaledToFit()
-            .frame(width: screenWidth, height: screenHeight) // Adjust as needed
-            .offset(x: dragOffset.width, y: 0) // Apply horizontal offset only
-            .gesture(
-                DragGesture()
-                    .onChanged { value in
-                        // Update offset with horizontal movement only
-                        dragOffset.width = value.translation.width 
-                        
-                        // Calculate rotation angle based on horizontal swipe direction
-                        angle = dragOffset.width / 10 // Adjust divisor for sensitivity
-                    }
-                    .onEnded { value in
-                        if value.translation.width > 100 {
-                            // Swipe right: Keep the photo
-                            onSwipe(true)
-                        } else if value.translation.width < -100 {
-                            // Swipe left: Delete the photo
-                            onSwipe(false)
-                        }
-                        
-                        // Snap back to the center
-                        withAnimation(.spring()) {
-                            dragOffset = .zero
-                            angle = 0
-                        }
-                    }
-            )
-            .rotation3DEffect(
-                .degrees(angle),
-                axis: (x: 0.0, y: 0, z: 0.001), // Diagonal rotation
-                perspective: 0.8          // Adds a depth perspective
-            )
+        if imageIndex == 0 {
+            VStack {
+                Text("Swipe right to keep, left to delete")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .padding(.bottom, 8)
+                
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: screenWidth, height: screenHeight)
+                    .offset(x: dragOffset.width, y: 0)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                dragOffset.width = value.translation.width
+                                angle = dragOffset.width / rotationSensitivity
+                            }
+                            .onEnded { value in
+                                if value.translation.width > swipeThreshold {
+                                    onSwipe(true) // Swipe right
+                                    triggerHapticFeedback()
+                                } else if value.translation.width < -swipeThreshold {
+                                    onSwipe(false) // Swipe left
+                                    triggerHapticFeedback()
+                                }
+                                
+                                withAnimation(.spring()) {
+                                    dragOffset = .zero
+                                    angle = 0
+                                }
+                            }
+                    )
+                    .rotation3DEffect(
+                        .degrees(angle),
+                        axis: (x: 0.0, y: 0, z: 0.001),
+                        perspective: 0.8
+                    )
+                    .accessibilityLabel("Draggable Image")
+                    .accessibilityHint("Swipe right to keep, swipe left to delete")
+            }
+        }
+    }
+    
+    private func triggerHapticFeedback() {
+        let generator = UIImpactFeedbackGenerator(style: .medium)
+        generator.impactOccurred()
     }
 }
