@@ -15,8 +15,8 @@ struct ContentView: View {
     var body: some View {
         VStack {
             Spacer()
-            if viewModel.photoStack.isEmpty && viewModel.isLoading {
-                ProgressView("Loading Photos...")
+            if viewModel.isLoading {
+                LoadingView()
             } else if viewModel.photoStack.isEmpty {
                 VStack {
                     Text("No more photos available!")
