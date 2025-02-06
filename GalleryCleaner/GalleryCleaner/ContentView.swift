@@ -40,9 +40,9 @@ struct ContentView: View {
                 }
                 .padding()
             }
-            Spacer()
             Button("Delete All", action: viewModel.deletePendingPhotos)
                 .disabled(viewModel.photosToDelete.isEmpty)
+            Spacer()
         }
     }
 }

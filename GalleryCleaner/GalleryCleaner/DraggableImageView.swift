@@ -18,8 +18,10 @@ struct DraggableImageView: View {
     let swipeThreshold: CGFloat = 100
     let rotationSensitivity: Double = 10
     
-    private let screenWidth = UIScreen.main.bounds.width
+    private let horizontalPadding: CGFloat = 32.0
+    private let screenWidth = UIScreen.main.bounds.width - horizontalPadding
     private let screenHeight = UIScreen.main.bounds.height - 200
+    let cornerRadius: CGFloat = 16 // Define the corner radius value
     
     var body: some View {
         if imageIndex == 0 {
@@ -31,8 +33,9 @@ struct DraggableImageView: View {
                 
                 Image(uiImage: image)
                     .resizable()
-                    .scaledToFit()
+                    .scaledToFill()
                     .frame(width: screenWidth, height: screenHeight)
+                    .cornerRadius(cornerRadius) // Add corner radius
                     .offset(x: dragOffset.width, y: 0)
                     .gesture(
                         DragGesture()

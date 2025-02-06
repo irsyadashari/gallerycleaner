@@ -15,6 +15,7 @@ class GalleryViewModel: ObservableObject {
     @Published var keptPhotos: [Photo] = []
     @Published var photosToDelete: [Photo] = []
     @Published var fetchLimit: Int = 10
+    @Published var fetchThreshold: Int = 3
     
     private let imageManager = PHImageManager.default()
     private let screenWidth = UIScreen.main.bounds.width
@@ -24,6 +25,10 @@ class GalleryViewModel: ObservableObject {
         requestPhotoLibraryAccess()
     }
     
+    func shouldFetchMorePhotos() -> Bool {
+        return photoStack.count <= fetchThreshold && !isLoading
+    }
+    
     func handleSwipe(at index: Int, keep: Bool) {
         guard index < photoStack.count else { return }
         let photo = photoStack.remove(at: index)
@@ -31,6 +36,10 @@ class GalleryViewModel: ObservableObject {
             keptPhotos.append(photo)
         } else {
             photosToDelete.append(photo)
+        }
+        
+        if shouldFetchMorePhotos() {
+            fetchMorePhotos()
         }
     }
     
